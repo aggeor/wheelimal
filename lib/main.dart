@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:wheelimal/providers.dart';
 import 'package:wheelimal/spin_wheel_page.dart';
@@ -9,6 +10,9 @@ void main() {
       create: (context) => ThemeProvider(),
       child: const Wheelimal(),
     ),
+  );
+  SystemChrome.setPreferredOrientations(
+    [DeviceOrientation.portraitUp],
   );
 }
 

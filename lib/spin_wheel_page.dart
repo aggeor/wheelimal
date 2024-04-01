@@ -154,7 +154,7 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
                 },
                 onFling: () {
                   setState(() {
-                    selectedItem.add(Fortune.randomInt(0, options.length - 1));
+                    selectedItem.add(Fortune.randomInt(0, options.length));
                   });
                 },
               ),
