@@ -99,7 +99,11 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
             onPressed: () {
               Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
             },
-            icon: const Icon(Icons.dark_mode),
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
           ),
         ],
       ),
