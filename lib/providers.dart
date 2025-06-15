@@ -1,18 +1,27 @@
 import 'package:flutter/material.dart';
 
 class ThemeProvider with ChangeNotifier {
-  ThemeData _themeData = ThemeData.light();
+  bool _isDarkMode = false;
+  Color _seedColor = Colors.deepPurpleAccent; // Default seed color
 
-  ThemeData get themeData => _themeData;
+  Color get seedColor => _seedColor;
+  bool get isDarkMode => _isDarkMode;
 
-  set themeData(ThemeData themeData) {
-    _themeData = themeData;
+  ThemeData get themeData => ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: _seedColor,
+          brightness: _isDarkMode ? Brightness.dark : Brightness.light,
+        ),
+        useMaterial3: true,
+      );
+
+  void toggleTheme() {
+    _isDarkMode = !_isDarkMode;
     notifyListeners();
   }
 
-  void toggleTheme() {
-    _themeData =
-        _themeData == ThemeData.light() ? ThemeData.dark() : ThemeData.light();
+  void setSeedColor(Color color) {
+    _seedColor = color;
     notifyListeners();
   }
 }
