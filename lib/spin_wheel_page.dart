@@ -16,6 +16,7 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
   String result = '';
   final newOptionController = TextEditingController();
   Map<int, TextEditingController> controllers = {};
+  bool isSpinning = false;
 
   @override
   void initState() {
@@ -166,10 +167,14 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
                       onAnimationEnd: () {
                         setState(() {
                           result = options[selectedItem.value];
+                          isSpinning = false;
                         });
                       },
                       onFling: () {
+                        if (isSpinning) return;
                         setState(() {
+                          isSpinning = true;
+                          result = '';
                           selectedItem
                               .add(Fortune.randomInt(0, options.length));
                         });
@@ -178,11 +183,17 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () {
-                      setState(() {
-                        selectedItem.add(Fortune.randomInt(0, options.length));
-                      });
-                    },
+                    onPressed: isSpinning
+                        ? null
+                        : () {
+                            if (isSpinning) return;
+                            setState(() {
+                              isSpinning = true;
+                              result = '';
+                              selectedItem
+                                  .add(Fortune.randomInt(0, options.length));
+                            });
+                          },
                     style: TextButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary,
                       padding: const EdgeInsets.symmetric(
@@ -209,23 +220,26 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
                       ListTile(
                         title: TextField(
                           controller: newOptionController,
+                          enabled: !isSpinning,
                           decoration: const InputDecoration.collapsed(
                               hintText: 'Add new option'),
                         ),
                         trailing: IconButton(
                           icon: const Icon(Icons.add),
-                          onPressed: addOption,
+                          onPressed: isSpinning ? null : addOption,
                         ),
                       ),
                       ...List.generate(options.length, (index) {
                         return ListTile(
                           title: TextField(
                             controller: controllers[index],
+                            enabled: !isSpinning,
                             onTap: () => editOption(index),
                           ),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete),
-                            onPressed: () => deleteOption(index),
+                            onPressed:
+                                isSpinning ? null : () => deleteOption(index),
                           ),
                         );
                       }),
