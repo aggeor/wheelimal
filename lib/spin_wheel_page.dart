@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_fortune_wheel/flutter_fortune_wheel.dart';
 import 'package:provider/provider.dart';
 import 'package:rxdart/subjects.dart';
+import 'package:wheelimal/color_picker.dart';
 import 'package:wheelimal/providers.dart';
-import 'dart:math' as math;
 
 class SpinWheelPage extends StatefulWidget {
   const SpinWheelPage({super.key});
@@ -12,67 +12,85 @@ class SpinWheelPage extends StatefulWidget {
 }
 
 class _SpinWheelPageState extends State<SpinWheelPage> {
-  final selectedItem = BehaviorSubject<int>();
-  final options = ['1', '2', '3', '4', '5'];
-  String result = '';
-  final newOptionController = TextEditingController();
-  Map<int, TextEditingController> controllers = {};
-  bool isSpinning = false;
+  // Reactive stream controller for wheel selection
+  final BehaviorSubject<int> _selectedItem = BehaviorSubject<int>();
+
+  // Wheel options management
+  final List<String> _options = ['1', '2', '3', '4', '5'];
+  final TextEditingController _newOptionController = TextEditingController();
+  final Map<int, TextEditingController> _optionControllers = {};
+
+  // Wheel state
+  String _result = '';
+  bool _isSpinning = false;
 
   @override
   void initState() {
-    updateControllers();
     super.initState();
+    _initializeControllers();
   }
 
   @override
   void dispose() {
-    selectedItem.close();
-    newOptionController.dispose();
-    for (var controller in controllers.values) {
+    _selectedItem.close();
+    _newOptionController.dispose();
+    for (var controller in _optionControllers.values) {
       controller.dispose();
     }
     super.dispose();
   }
 
-  void updateControllers() {
-    controllers.clear();
-    for (var i = 0; i < options.length; i++) {
-      controllers[i] = TextEditingController(text: options[i]);
+  // Initialize text controllers for options
+  void _initializeControllers() {
+    for (var i = 0; i < _options.length; i++) {
+      _optionControllers[i] = TextEditingController(text: _options[i]);
+      // Setup listener for each controller to handle text changes
+      _setupControllerListener(i);
     }
   }
 
-  void addOption() {
-    setState(() {
-      final newText = newOptionController.text.trim();
-      if (newText.isEmpty || options.contains(newText)) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('The option already exists or is empty.')));
-        return;
+  // Setup listener for text controller changes
+  void _setupControllerListener(int index) {
+    _optionControllers[index]!.addListener(() {
+      if (_options[index] != _optionControllers[index]!.text) {
+        setState(() {
+          _options[index] = _optionControllers[index]!.text;
+        });
       }
-      options.add(newText);
-      controllers[options.length - 1] = TextEditingController(text: newText);
-      newOptionController.clear();
     });
   }
 
-  void editOption(int index) {
-    TextEditingController? controller = controllers[index];
-    if (controller != null) {
-      controller.addListener(() {
-        setState(() {
-          options[index] = controller.text;
-        });
-      });
-    }
+  // Add new option to the wheel
+  void _addOption() {
+    setState(() {
+      final newText = _newOptionController.text.trim();
+
+      if (newText.isEmpty || _options.contains(newText)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The option already exists or is empty.'),
+        ));
+        return;
+      }
+
+      _options.add(newText);
+      final newIndex = _options.length - 1;
+      _optionControllers[newIndex] = TextEditingController(text: newText);
+      _setupControllerListener(newIndex); // Add listener for the new controller
+      _newOptionController.clear();
+    });
   }
 
-  void deleteOption(int index) {
+  // Delete an option from the wheel
+  void _deleteOption(int index) {
     setState(() {
-      if (options.length > 2) {
-        options.removeAt(index);
-        controllers.remove(index);
-        updateControllers();
+      if (_options.length > 2) {
+        // Dispose the controller before removing it
+        _optionControllers[index]!.dispose();
+        _optionControllers.remove(index);
+        _options.removeAt(index);
+
+        // Reinitialize controllers to handle index changes
+        _initializeControllers();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('There must be at least 2 options.')),
@@ -81,310 +99,234 @@ class _SpinWheelPageState extends State<SpinWheelPage> {
     });
   }
 
-  void showColorPickerDialog() {
+  // Spin the wheel
+  void _spinWheel() {
+    if (_isSpinning) return;
+
+    setState(() {
+      _isSpinning = true;
+      _result = '';
+      _selectedItem.add(Fortune.randomInt(0, _options.length));
+    });
+  }
+
+  // Handle wheel animation completion
+  void _handleWheelAnimationEnd() {
+    setState(() {
+      _result = _options[_selectedItem.value];
+      _isSpinning = false;
+    });
+  }
+
+  // Show color picker dialog
+  void _showColorPickerDialog() {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
     Color initialColor = themeProvider.seedColor;
-    // Convert initial color to HSV
-    HSVColor hsvColor = HSVColor.fromColor(initialColor);
 
     showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (dialogContext, setState) {
-            void handleColorSelection(dynamic details) {
-              final RenderBox box =
-                  dialogContext.findRenderObject() as RenderBox;
-              final Offset localPosition =
-                  box.globalToLocal(details.globalPosition);
-
-              final double centerX = box.size.width / 2;
-              final double centerY = box.size.height / 2;
-              final double radius = box.size.width / 2;
-
-              final double dx = localPosition.dx - centerX;
-              final double dy = localPosition.dy - centerY;
-              final double distance = math.sqrt(dx * dx + dy * dy);
-
-              // Only process points inside the color wheel
-              if (distance <= radius) {
-                final double angle = math.atan2(dy, dx);
-                final double hue = (angle * 180 / math.pi + 360) % 360;
-
-                setState(() {
-                  hsvColor = HSVColor.fromAHSV(1.0, hue, 1.0, 1.0);
-                });
-              }
-            }
-
-            return AlertDialog(
-              title: const Text('Pick a theme color'),
-              content: SizedBox(
-                width: 250,
-                height: 250,
-                child: GestureDetector(
-                  onPanUpdate: handleColorSelection,
-                  onTapDown: handleColorSelection,
-                  child: CustomPaint(
-                    painter: _ColorWheelPainter(hsvColor),
-                  ),
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                ),
-                TextButton(
-                  child: const Text('Select'),
-                  onPressed: () {
-                    themeProvider.setSeedColor(hsvColor.toColor());
-                    Navigator.of(dialogContext).pop();
-                  },
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context) => ColorWheelPickerDialog(initialColor: initialColor),
     );
+  }
+
+  // Calculate font size based on option text and count
+  double _calculateFontSize(String option) {
+    const double baseFontSize = 24;
+    const int maxLength = 10;
+    final int optionCount = _options.length;
+
+    double fontSize = baseFontSize;
+
+    // Adjust for text length
+    if (option.length > maxLength) {
+      fontSize -= (option.length - maxLength) * 0.8;
+    }
+
+    // Adjust for number of options
+    if (optionCount > 6) {
+      fontSize -= (optionCount - 6) * 1.0;
+    }
+
+    // Clamp between min and max
+    return fontSize.clamp(10.0, baseFontSize);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context).themeData;
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: Text(
-          'Wheelimal',
-          style: TextStyle(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.bold,
-            fontSize: 30,
+      appBar: _buildAppBar(theme),
+      body: _buildBody(theme),
+    );
+  }
+
+  // App bar component
+  AppBar _buildAppBar(ThemeData theme) {
+    return AppBar(
+      title: Text(
+        'Wheelimal',
+        style: TextStyle(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.bold,
+          fontSize: 30,
+        ),
+      ),
+      actions: [
+        IconButton(
+          onPressed: _showColorPickerDialog,
+          icon: const Icon(Icons.palette),
+          tooltip: 'Choose color',
+        ),
+        IconButton(
+          onPressed: () =>
+              Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+          icon: Icon(
+            theme.brightness == Brightness.dark
+                ? Icons.light_mode
+                : Icons.dark_mode,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: showColorPickerDialog,
-            icon: const Icon(Icons.palette),
-            tooltip: 'Choose color',
+      ],
+    );
+  }
+
+  // Main content body
+  Widget _buildBody(ThemeData theme) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
-          IconButton(
-            onPressed: () {
-              Provider.of<ThemeProvider>(context, listen: false).toggleTheme();
-            },
-            icon: Icon(
-              theme.brightness == Brightness.dark
-                  ? Icons.light_mode
-                  : Icons.dark_mode,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 12),
+                if (_result.isNotEmpty) _buildResultText(theme),
+                _buildWheel(theme),
+                const SizedBox(height: 12),
+                _buildSpinButton(theme),
+                const SizedBox(height: 12),
+                _buildOptionsList(),
+              ],
             ),
           ),
-        ],
+        );
+      },
+    );
+  }
+
+  // Result display text
+  Widget _buildResultText(ThemeData theme) {
+    return Text(
+      _result,
+      style: TextStyle(
+        color: theme.colorScheme.primary,
+        fontWeight: FontWeight.bold,
+        fontSize: 50,
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 12),
-                  if (result.isNotEmpty)
-                    Text(
-                      result,
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 50,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  SizedBox(
-                    height: 300,
-                    child: FortuneWheel(
-                      selected: selectedItem.stream,
-                      animateFirst: false,
-                      items: options.map((option) {
-                        final int optionCount = options.length;
-                        const double baseFontSize = 24;
-                        const int maxLength = 10;
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 
-                        // Reduce font size based on number of options and text length
-                        double adjustedFontSize = baseFontSize -
-                            ((option.length > maxLength
-                                    ? option.length - maxLength
-                                    : 0) *
-                                0.8) -
-                            ((optionCount > 6 ? optionCount - 6 : 0) * 1.0);
-
-                        // Clamp font size to avoid being too small or too big
-                        adjustedFontSize =
-                            adjustedFontSize.clamp(10.0, baseFontSize);
-
-                        return FortuneItem(
-                          child: SizedBox(
-                            width: 80,
-                            child: Text(
-                              option,
-                              textAlign: TextAlign.center,
-                              softWrap: true,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: adjustedFontSize,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      onAnimationEnd: () {
-                        setState(() {
-                          result = options[selectedItem.value];
-                          isSpinning = false;
-                        });
-                      },
-                      onFling: () {
-                        if (isSpinning) return;
-                        setState(() {
-                          isSpinning = true;
-                          result = '';
-                          selectedItem
-                              .add(Fortune.randomInt(0, options.length));
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: isSpinning
-                        ? null
-                        : () {
-                            if (isSpinning) return;
-                            setState(() {
-                              isSpinning = true;
-                              result = '';
-                              selectedItem
-                                  .add(Fortune.randomInt(0, options.length));
-                            });
-                          },
-                    style: TextButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(32),
-                      ),
-                    ),
-                    child: Text(
-                      'Spin the wheel!',
-                      style: TextStyle(
-                        color: theme.colorScheme.surface,
-                        fontWeight: FontWeight.normal,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ListView(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(8),
-                    children: [
-                      ListTile(
-                        title: TextField(
-                          controller: newOptionController,
-                          enabled: !isSpinning,
-                          decoration: const InputDecoration.collapsed(
-                              hintText: 'Add new option'),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.add),
-                          onPressed: isSpinning ? null : addOption,
-                        ),
-                      ),
-                      ...List.generate(options.length, (index) {
-                        return ListTile(
-                          title: TextField(
-                            controller: controllers[index],
-                            enabled: !isSpinning,
-                            onTap: () => editOption(index),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete),
-                            onPressed:
-                                isSpinning ? null : () => deleteOption(index),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ],
+  // Fortune wheel component
+  Widget _buildWheel(ThemeData theme) {
+    return SizedBox(
+      height: 300,
+      child: FortuneWheel(
+        selected: _selectedItem.stream,
+        animateFirst: false,
+        items: _options.map((option) {
+          return FortuneItem(
+            child: SizedBox(
+              width: 80,
+              child: Text(
+                option,
+                textAlign: TextAlign.center,
+                softWrap: true,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: _calculateFontSize(option),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           );
-        },
+        }).toList(),
+        onAnimationEnd: _handleWheelAnimationEnd,
+        onFling: _spinWheel,
       ),
     );
   }
-}
 
-class _ColorWheelPainter extends CustomPainter {
-  final HSVColor selectedColor;
-
-  _ColorWheelPainter(this.selectedColor);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double radius = size.width / 2;
-    final Offset center = Offset(radius, radius);
-
-    // Create a gradient for the color wheel
-    final gradient = SweepGradient(
-      colors: List.generate(36, (index) {
-        return HSVColor.fromAHSV(1.0, index * 10.0, 1.0, 1.0).toColor();
-      }),
+  // Spin button
+  Widget _buildSpinButton(ThemeData theme) {
+    return TextButton(
+      onPressed: _isSpinning ? null : _spinWheel,
+      style: TextButton.styleFrom(
+        backgroundColor: theme.colorScheme.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+      ),
+      child: Text(
+        'Spin the wheel!',
+        style: TextStyle(
+          color: theme.colorScheme.surface,
+          fontWeight: FontWeight.normal,
+          fontSize: 20,
+        ),
+      ),
     );
-
-    // Draw the color wheel
-    final Paint paint = Paint()
-      ..shader = gradient
-          .createShader(Rect.fromCircle(center: center, radius: radius));
-
-    canvas.drawCircle(center, radius, paint);
-
-    // Draw selection indicator
-    final double hue = selectedColor.hue;
-    final double angle = hue * math.pi / 180;
-    final double indicatorRadius = radius * 0.85;
-    final Offset indicatorPosition = Offset(
-      center.dx + indicatorRadius * math.cos(angle),
-      center.dy + indicatorRadius * math.sin(angle),
-    );
-
-    // Draw outer white ring
-    canvas.drawCircle(
-        indicatorPosition,
-        12,
-        Paint()
-          ..color = Colors.white
-          ..strokeWidth = 2
-          ..style = PaintingStyle.stroke);
-
-    // Draw inner color circle
-    canvas.drawCircle(
-        indicatorPosition,
-        10,
-        Paint()
-          ..color = selectedColor.toColor()
-          ..style = PaintingStyle.fill);
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  // Options list
+  Widget _buildOptionsList() {
+    return ListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(8),
+      children: [
+        _buildAddOptionTile(),
+        ..._buildOptionTiles(),
+      ],
+    );
+  }
+
+  // Add new option tile
+  Widget _buildAddOptionTile() {
+    return ListTile(
+      title: TextField(
+        controller: _newOptionController,
+        enabled: !_isSpinning,
+        decoration: const InputDecoration.collapsed(
+          hintText: 'Add new option',
+        ),
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.add),
+        onPressed: _isSpinning ? null : _addOption,
+      ),
+    );
+  }
+
+  // List of option tiles
+  List<Widget> _buildOptionTiles() {
+    return List.generate(_options.length, (index) {
+      return ListTile(
+        title: TextField(
+          controller: _optionControllers[index],
+          enabled: !_isSpinning,
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete),
+          onPressed: _isSpinning ? null : () => _deleteOption(index),
+        ),
+      );
+    });
+  }
 }
